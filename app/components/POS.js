@@ -24,10 +24,26 @@ export default function POS({ onHome, onHistory, user }) {
     const [customerName, setCustomerName] = useState('');
     const [tableNumber, setTableNumber] = useState('');
 
+    // Global Settings State
+    const [globalSettings, setGlobalSettings] = useState({ member: 5, owner: 100 });
+
     // Initial Fetch
     useEffect(() => {
         fetchProducts();
+        fetchSettings();
     }, []);
+
+    const fetchSettings = async () => {
+        try {
+            const res = await fetch('/api/settings');
+            if (res.ok) {
+                const data = await res.json();
+                setGlobalSettings(data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch settings", err);
+        }
+    };
 
     const fetchProducts = async () => {
         try {
@@ -107,7 +123,10 @@ export default function POS({ onHome, onHistory, user }) {
 
     // Calculation Logic
     const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
-    const discountMember = member ? Math.round(subtotal * 0.05) : 0;
+    // Hitung diskon secara dinamis mengambil dari Global Settings dan Kategori Member
+    const discountRate = member ? (member.category === 'owner' ? globalSettings.owner : globalSettings.member) : 0;
+    const discountMember = member ? Math.round(subtotal * (discountRate / 100)) : 0;
+    const categoryName = member ? (member.category === 'owner' ? 'Owner' : 'Member') : '';
     const afterDiscount = subtotal - discountMember;
 
     // 3% Service Charge
@@ -151,40 +170,40 @@ export default function POS({ onHome, onHistory, user }) {
 
     const printReceipt = (orderData) => {
         const getReceiptHTML = (isCopy = false) => `
-            <div style="font-family: 'Courier New', monospace; font-size: 11px; width: 100%; max-width: 58mm; margin: 0 auto; padding: 0; color: #000; background: #fff;">
+            <div style="font-family: 'Courier New', monospace; font-size: 14px; font-weight: bold; width: 100%; max-width: 58mm; margin: 0 auto; padding: 0; color: #000; background: #fff;">
                 <div style="text-align: center; margin-bottom: 5px;">
-                    <h2 style="margin: 0; font-size: 14px; font-weight: bold;">NAO COFFEE & WRAP</h2>
-                    <p style="margin: 0; font-size: 9px;">Jl. Boni, RT 001/RW 004, Parigi</p>
-                    <p style="margin: 0; font-size: 9px;">Pd. Aren, Tangerang Selatan</p>
-                    ${isCopy ? `<p style="margin: 5px 0 0 0; font-size: 12px; font-weight: bold;">*** COPY ***</p>` : ''}
+                    <h2 style="margin: 0; font-size: 18px; font-weight: bold;">NAO COFFEE & WRAP</h2>
+                    <p style="margin: 0; font-size: 13px;">Jl. Boni, RT 001/RW 004, Parigi</p>
+                    <p style="margin: 0; font-size: 13px;">Pd. Aren, Tangerang Selatan</p>
+                    ${isCopy ? `<p style="margin: 5px 0 0 0; font-size: 16px; font-weight: bold;">*** COPY ***</p>` : ''}
                 </div>
                 <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
                 
                 <div style="text-align: center; margin: 5px 0;">
-                    <div style="font-size: 9px;">ANTRIAN</div>
-                    <div style="font-size: 20px; font-weight: bold;">${orderData.queueNumber || orderData.orderId.split('-')[1]}</div>
+                    <div style="font-size: 13px;">ANTRIAN</div>
+                    <div style="font-size: 28px; font-weight: bold;">${orderData.queueNumber || orderData.orderId.split('-')[1]}</div>
                 </div>
 
                 <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
                 
-                <div style="display: flex; justify-content: space-between; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
                     <span>${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                     <span>${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
                     <span>Order ID</span>
                     <span>${orderData.orderId}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
                     <span>Kasir</span>
                     <span>${user?.name || 'Cashier'}</span> 
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
                     <span>Pelanggan</span>
                     <span>${orderData.customerName || 'Guest'}</span>
                 </div>
                 ${orderData.tableNumber ? `
-                <div style="display: flex; justify-content: space-between; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
                     <span>Meja</span>
                     <span>${orderData.tableNumber}</span>
                 </div>` : ''}
@@ -194,90 +213,97 @@ export default function POS({ onHome, onHistory, user }) {
                 <div style="margin-bottom: 5px;">
                     ${orderData.items.map(item => `
                         <div style="margin-bottom: 3px;">
-                            <div style="font-weight: bold; font-size: 10px;">${item.name}</div>
-                            <div style="display: flex; justify-content: space-between; font-size: 9px;">
+                            <div style="font-weight: bold; font-size: 14px;">${item.name}</div>
+                            <div style="display: flex; justify-content: space-between; font-size: 13px;">
                                 <span>${item.qty}x ${rupiah(item.price)}</span>
                                 <span>${rupiah(item.price * item.qty)}</span>
                             </div>
-                            ${item.note ? `<div style="font-size: 8px; font-style: italic;">(${item.note})</div>` : ''}
+                            ${item.note ? `<div style="font-size: 12px; font-style: italic;">(${item.note})</div>` : ''}
                         </div>
                     `).join('')}
                 </div>
                 
                 <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
                 
-                <div style="display: flex; justify-content: space-between; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
                     <span>Subtotal</span>
                     <span>${rupiah(orderData.totalAmount || 0)}</span>
                 </div>
                 ${orderData.discountAmount > 0 ? `
-                <div style="display: flex; justify-content: space-between; font-size: 9px;">
-                    <span>Disc. Member</span>
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                    <span>Disc. ${orderData.categoryName || 'Member'} (${orderData.discountRate || 5}%)</span>
                     <span>-${rupiah(orderData.discountAmount)}</span>
                 </div>` : ''}
-                <div style="display: flex; justify-content: space-between; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
                     <span>SC (3%)</span>
                     <span>${rupiah(orderData.serviceCharge || 0)}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
                     <span>PB1 (10%)</span>
                     <span>${rupiah(orderData.taxAmount || 0)}</span>
                 </div>
                 
                 <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
                 
-                <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px;">
+                <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 16px;">
                     <span>TOTAL</span>
                     <span>${rupiah(orderData.finalAmount)}</span>
                 </div>
                 
                 <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
                 
-                <div style="text-align: center; margin: 5px 0; font-weight: bold; font-size: 10px;">
+                <div style="text-align: center; margin: 5px 0; font-weight: bold; font-size: 14px;">
                     ${orderData.paymentMethod.toUpperCase()}
                 </div>
                 
                 <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
                 
                 <div style="text-align: center; margin-top: 5px;">
-                    <p style="margin: 0; font-size: 9px;">Terima Kasih</p>
+                    <p style="margin: 0; font-size: 13px;">Terima Kasih</p>
                 </div>
             </div>
         `;
 
-        const html = `
-            <html>
-            <head>
-                <title>Receipt</title>
-                <style>
-                    @page { margin: 0; size: 58mm auto; }
-                    body { margin: 0; padding: 0; width: 58mm; background: white; color: black; }
-                    @media print { .page-break { page-break-before: always; } }
-                </style>
-            </head>
-            <body>
-                ${getReceiptHTML(false)}
-                <div class="page-break" style="margin: 10px 0; border-top: 1px dashed #ccc;"></div>
-                ${getReceiptHTML(true)}
-            </body>
-            </html>
-        `;
+        const printSingle = (isCopy) => {
+            const html = `
+                <html>
+                <head>
+                    <title>Receipt ${isCopy ? '(Copy)' : ''}</title>
+                    <style>
+                        @page { margin: 0; size: 58mm auto; }
+                        body { margin: 0; padding: 0; width: 58mm; background: white; color: black; }
+                    </style>
+                </head>
+                <body>
+                    ${getReceiptHTML(isCopy)}
+                </body>
+                </html>
+            `;
 
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-        
-        iframe.contentWindow.document.open();
-        iframe.contentWindow.document.write(html);
-        iframe.contentWindow.document.close();
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
 
-        setTimeout(() => {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
+            iframe.contentWindow.document.open();
+            iframe.contentWindow.document.write(html);
+            iframe.contentWindow.document.close();
+
             setTimeout(() => {
-                document.body.removeChild(iframe);
-            }, 1000);
-        }, 500);
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                setTimeout(() => {
+                    document.body.removeChild(iframe);
+                }, 1000);
+            }, 500);
+        };
+
+        // Print struk asli
+        printSingle(false);
+
+        // Print struk copy dengan jeda 3 detik
+        setTimeout(() => {
+            printSingle(true);
+        }, 3000);
     };
 
     const handleCheckout = async () => {
@@ -344,6 +370,8 @@ export default function POS({ onHome, onHistory, user }) {
                 }),
                 totalAmount: subtotal,
                 discountAmount: discountMember,
+                categoryName: categoryName,
+                discountRate: discountRate,
                 serviceCharge: serviceChargeAmt,
                 taxAmount: ppn,
                 finalAmount: grandTotal,
@@ -353,9 +381,67 @@ export default function POS({ onHome, onHistory, user }) {
                 tableNumber: tableNumber
             };
 
+            // --- PRINT BERJALAN DARI LAPTOP/PC DARI SINI ---
             printReceipt(receiptData);
+            // --- SAMPAI SINI (LAPTOP/PC) ---
 
+            /* JIKA INGIN BISA PRINT BERJALAN DI ANDROID MAKA PAKAI YANG INI. MULAI DARI SINI 
+            
+            // 1. Fungsi Print RawBT
+            const printKeRawBT = (base64Data) => {
+                window.location.href = "intent:base64," + base64Data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
+            };
 
+            // 2. Format Teks Struk
+            let strukText = "      NAO COFFEE & WRAP      \n";
+            strukText += "Jl. Boni, Pd. Aren, Tangsel\n";
+            strukText += "--------------------------------\n";
+            strukText += "Antrian: " + receiptData.queueNumber + "\n";
+            strukText += "Order ID: " + receiptData.orderId + "\n";
+            strukText += "Kasir: " + (user?.name || 'Cashier') + "\n";
+            strukText += "Pelanggan: " + receiptData.customerName + "\n";
+            if (receiptData.tableNumber) {
+                strukText += "Meja: " + receiptData.tableNumber + "\n";
+            }
+            strukText += "--------------------------------\n";
+            
+            receiptData.items.forEach(item => {
+                strukText += item.name + "\n";
+                // Formatting harga dan qty agar pas di line printer
+                let qtyPrice = item.qty + "x " + item.price;
+                let totalLine = "" + (item.price * item.qty);
+                // Hitung spasi (asumsi printer thermal 32 karakter per baris)
+                let spaces = 32 - qtyPrice.length - totalLine.length;
+                if(spaces < 1) spaces = 1;
+                strukText += qtyPrice + " ".repeat(spaces) + totalLine + "\n";
+                if(item.note) {
+                    strukText += "  (" + item.note + ")\n";
+                }
+            });
+            
+            strukText += "--------------------------------\n";
+            strukText += "Subtotal: " + receiptData.totalAmount + "\n";
+            if(receiptData.discountAmount > 0) {
+                strukText += "Disc: -" + receiptData.discountAmount + "\n";
+            }
+            strukText += "SC (3%): " + receiptData.serviceCharge + "\n";
+            strukText += "PB1 (10%): " + receiptData.taxAmount + "\n";
+            strukText += "--------------------------------\n";
+            strukText += "TOTAL:   " + receiptData.finalAmount + "\n";
+            strukText += "--------------------------------\n";
+            strukText += "Pembayaran: " + receiptData.paymentMethod.toUpperCase() + "\n";
+            strukText += "--------------------------------\n";
+            strukText += "         Terima Kasih           \n\n\n\n";
+
+            // 3. Konversi ke Base64 dan Kirim Intent BT Printer
+            try {
+                const base64Str = btoa(strukText);
+                printKeRawBT(base64Str);
+            } catch (e) {
+                console.error('Gagal convert struk', e);
+            }
+            
+            SAMPAI SINI (ANDROID) */
 
             // Reset
             setCart([]);
@@ -661,7 +747,7 @@ export default function POS({ onHome, onHistory, user }) {
                     </div>
                     {member && (
                         <div className="summary-row">
-                            <span>Diskon Member (5%)</span>
+                            <span>Diskon {categoryName} ({discountRate}%)</span>
                             <span>-{rupiah(discountMember)}</span>
                         </div>
                     )}

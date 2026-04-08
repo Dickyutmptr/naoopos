@@ -15,14 +15,14 @@ export default function KitchenBar({ onHome, user = {} }) {
 
     useEffect(() => {
         fetchOrders();
-        const interval = setInterval(fetchOrders, 10000); // Poll every 10s
+        const interval = setInterval(fetchOrders, 5000); // Poll every 5s for real-time
         return () => clearInterval(interval);
     }, []);
 
     const fetchOrders = async () => {
         try {
-            // Fetch with high limit to see all active orders
-            const res = await fetch('/api/orders?limit=100');
+            // Fetch with high limit to see all active orders. Use t to bypass browser/nextjs cache
+            const res = await fetch(`/api/orders?limit=100&t=${Date.now()}`);
             const result = await res.json();
 
             // Handle pagination structure { data: [...], meta: ... }
@@ -60,141 +60,177 @@ export default function KitchenBar({ onHome, user = {} }) {
     const getStationItems = (orderItems, station) => {
         return orderItems.filter(item => {
             // Safety check for product/category existence
-            const cat = item.product?.category?.name?.toLowerCase() || item.product?.kategori?.toLowerCase() || '';
-            const catName = cat.trim();
+            // API provides both: item.product.kategori (string name) and item.product.category.name
+            const rawCat = item.product?.kategori || item.product?.category?.name || '';
+            const catName = rawCat.trim().toLowerCase();
 
             if (station === 'kitchen') {
-                // Makanan, Snack, Cemilan
-                return ['makanan', 'snack', 'cemilan'].includes(catName);
+                // Kitchen: Makanan dan Snack (semua kategori makanan/cemilan)
+                return [
+                    'makanan',
+                    'snack',
+                    'snacks',
+                    'cemilan',
+                    'makanan & snack',
+                    'makanan dan snack'
+                ].includes(catName);
             } else if (station === 'bar') {
-                // Coffee Series, Coconut Series, Matcha Series, Chocolate Series, Non-Coffee, Minuman
-                return catName.includes('coffee') || catName.includes('matcha') || catName.includes('chocolate') || catName.includes('choco') || catName.includes('coconut') || ['non-coffee', 'minuman'].includes(catName);
+                // Bar: Semua pesanan yang BUKAN makanan (termasuk minuman baru, add-on, dsb)
+                const isKitchen = [
+                    'makanan',
+                    'snack',
+                    'snacks',
+                    'cemilan',
+                    'makanan & snack',
+                    'makanan dan snack'
+                ].includes(catName);
+                return !isKitchen;
             }
             return false;
         });
     };
 
-    const handlePrintSticker = (order, relevantItems) => {
-        // Build the HTML for printing
-        let printHtml = `
-            <html>
-                <head>
-                    <title>Print Stiker Bar</title>
-                    <style>
-                        @page {
-                            size: 105mm 148mm; /* A6 size */
-                            margin: 0;
-                        }
-                        body {
-                            margin: 0;
-                            padding: 0;
-                            font-family: monospace; /* Monospace fits receipt style best */
-                            font-weight: bold;
-                            color: #000000;
-                        }
-                        .sticker-page {
-                            width: 105mm;
-                            height: 148mm;
-                            box-sizing: border-box;
-                            padding: 5mm;
-                            page-break-after: always;
-                            display: flex;
-                            flex-direction: column;
-                            line-height: 1.4;
-                            /* border: 1px dashed #ccc; Optional debug boundary */
-                        }
-                        .header-row {
-                            display: flex;
-                            justify-content: space-between;
-                            font-size: 18px;
-                            margin-bottom: 5px;
-                        }
-                        .header-row .left { text-align: left; }
-                        .header-row .right { text-align: right; }
-                        
-                        .item-name {
-                            font-size: 24px;
-                            margin-top: 10px;
-                            /* Allows wrapping for long names */
-                            word-wrap: break-word;
-                        }
-                        .item-note {
-                            font-size: 16px;
-                            margin-top: 5px;
-                        }
-                    </style>
-                </head>
-                <body>
-        `;
+    // --- MULAI KODE LAMA PRINT STIKER DARI SINI ---
+    // const handlePrintSticker = (order, relevantItems) => {
+    //     // Build the HTML for printing
+    //     let printHtml = `
+    //         <html>
+    //             <head>
+    //                 <title>Print Stiker Bar</title>
+    //                 <style>
+    //                     @page {
+    //                         size: 105mm 148mm; /* A6 size */
+    //                         margin: 0;
+    //                     }
+    //                     body {
+    //                         margin: 0;
+    //                         padding: 0;
+    //                         font-family: monospace; /* Monospace fits receipt style best */
+    //                         font-weight: bold;
+    //                         color: #000000;
+    //                     }
+    //                     .sticker-page {
+    //                         width: 105mm;
+    //                         height: 148mm;
+    //                         box-sizing: border-box;
+    //                         padding: 5mm;
+    //                         page-break-after: always;
+    //                         display: flex;
+    //                         flex-direction: column;
+    //                         line-height: 1.4;
+    //                         /* border: 1px dashed #ccc; Optional debug boundary */
+    //                     }
+    //                     .header-row {
+    //                         display: flex;
+    //                         justify-content: space-between;
+    //                         font-size: 18px;
+    //                         margin-bottom: 5px;
+    //                     }
+    //                     .header-row .left { text-align: left; }
+    //                     .header-row .right { text-align: right; }
+    //                     
+    //                     .item-name {
+    //                         font-size: 24px;
+    //                         margin-top: 10px;
+    //                         /* Allows wrapping for long names */
+    //                         word-wrap: break-word;
+    //                     }
+    //                     .item-note {
+    //                         font-size: 16px;
+    //                         margin-top: 5px;
+    //                     }
+    //                 </style>
+    //             </head>
+    //             <body>
+    //     `;
+    //
+    //     const printDate = new Date();
+    //     const formattedDate = printDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '. ' + printDate.getFullYear();
+    //
+    //     const totalItems = relevantItems.reduce((acc, item) => acc + item.qty, 0);
+    //     let currentItemIndex = 1;
+    //
+    //     relevantItems.forEach(item => {
+    //         for (let i = 0; i < item.qty; i++) {
+    //             // Ensure customer name is uppercase and truncated if needed
+    //             const custName = (order.customerName || 'GUEST').toUpperCase();
+    //             // Extract just the numerical queue, removing the order prefix
+    //             let queueNo = "-";
+    //             if (order.queueNumber) {
+    //                 queueNo = order.queueNumber;
+    //             } else if (order.orderId) {
+    //                 const parts = order.orderId.split('-');
+    //                 if (parts.length > 1) {
+    //                     const parsed = parseInt(parts[1], 10);
+    //                     queueNo = isNaN(parsed) ? parts[1] : parsed;
+    //                 }
+    //             } else if (order.id) {
+    //                 const parts = order.id.split('-');
+    //                 if (parts.length > 1) {
+    //                     const parsed = parseInt(parts[1], 10);
+    //                     queueNo = isNaN(parsed) ? parts[1] : parsed;
+    //                 }
+    //             }
+    //
+    //             printHtml += `
+    //                 <div class="sticker-page">
+    //                     <div class="header-row">
+    //                         <div class="left">No: ${queueNo}</div>
+    //                         <div class="right">${currentItemIndex}/${totalItems}</div>
+    //                     </div>
+    //                     <div class="header-row">
+    //                         <div class="left">${formattedDate}</div>
+    //                         <div class="right">${custName}</div>
+    //                     </div>
+    //                     <div class="item-name">${item.product?.name || item.name}</div>
+    //                     ${item.note ? \`<div class="item-note">\${item.note}</div>\` : ''}
+    //                 </div>
+    //             \`;
+    //             currentItemIndex++;
+    //         }
+    //     });
+    //
+    //     printHtml += `
+    //             </body>
+    //             <script>
+    //                 window.onload = function() {
+    //                     window.print();
+    //                     setTimeout(function() { window.close(); }, 500);
+    //                 };
+    //             </script>
+    //         </html>
+    //     `;
+    //
+    //     const printWindow = window.open('', '_blank', 'width=400,height=600');
+    //     printWindow.document.write(printHtml);
+    //     printWindow.document.close();
+    //
+    //     // Mark as printed
+    //     setPrintedOrders(prev => {
+    //         const next = new Set(prev);
+    //         next.add(order.orderId || order.id);
+    //         return next;
+    //     });
+    // };
+    // --- AKHIR KODE LAMA PRINT STIKER SAMPAI SINI ---
 
-        const printDate = new Date();
-        const formattedDate = printDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '. ' + printDate.getFullYear();
-
-        const totalItems = relevantItems.reduce((acc, item) => acc + item.qty, 0);
-        let currentItemIndex = 1;
-
-        relevantItems.forEach(item => {
-            for (let i = 0; i < item.qty; i++) {
-                // Ensure customer name is uppercase and truncated if needed
-                const custName = (order.customerName || 'GUEST').toUpperCase();
-                // Extract just the numerical queue, removing the order prefix
-                let queueNo = "-";
-                if (order.queueNumber) {
-                    queueNo = order.queueNumber;
-                } else if (order.orderId) {
-                    const parts = order.orderId.split('-');
-                    if (parts.length > 1) {
-                        const parsed = parseInt(parts[1], 10);
-                        queueNo = isNaN(parsed) ? parts[1] : parsed;
-                    }
-                } else if (order.id) {
-                    const parts = order.id.split('-');
-                    if (parts.length > 1) {
-                        const parsed = parseInt(parts[1], 10);
-                        queueNo = isNaN(parsed) ? parts[1] : parsed;
-                    }
-                }
-
-                printHtml += `
-                    <div class="sticker-page">
-                        <div class="header-row">
-                            <div class="left">No: ${queueNo}</div>
-                            <div class="right">${currentItemIndex}/${totalItems}</div>
-                        </div>
-                        <div class="header-row">
-                            <div class="left">${formattedDate}</div>
-                            <div class="right">${custName}</div>
-                        </div>
-                        <div class="item-name">${item.product?.name || item.name}</div>
-                        ${item.note ? `<div class="item-note">${item.note}</div>` : ''}
-                    </div>
-                `;
-                currentItemIndex++;
-            }
-        });
-
-        printHtml += `
-                </body>
-                <script>
-                    window.onload = function() {
-                        window.print();
-                        setTimeout(function() { window.close(); }, 500);
-                    };
-                </script>
-            </html>
-        `;
-
-        const printWindow = window.open('', '_blank', 'width=400,height=600');
-        printWindow.document.write(printHtml);
-        printWindow.document.close();
-
-        // Mark as printed
+    // --- MULAI SOURCE CODE BARU (CEKLIS) ---
+    // FUNGSI CEKLIS PESANAN
+    // NOTE: Fungsi ini menggantikan fungsi print stiker di atas sementara waktu. 
+    // Pesanan harus diceklis untuk membuka tombol SELESAI.
+    const handleCheckOrder = (order) => {
         setPrintedOrders(prev => {
             const next = new Set(prev);
-            next.add(order.orderId || order.id);
+            const id = order.orderId || order.id;
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
             return next;
         });
     };
+    // --- AKHIR SOURCE CODE BARU (CEKLIS) ---
 
     const renderOrderCard = (order, station) => {
         const relevantItems = getStationItems(order.items || [], station);
@@ -224,6 +260,7 @@ export default function KitchenBar({ onHome, user = {} }) {
                     ))}
                 </ul>
                 <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
+                    {/* --- MULAI KODE LAMA TOMBOL PRINT (DARI SINI) ---
                     {station === 'bar' && !isDone && (
                         <button
                             onClick={() => handlePrintSticker(order, relevantItems)}
@@ -242,6 +279,38 @@ export default function KitchenBar({ onHome, user = {} }) {
                             PRINT STIKER
                         </button>
                     )}
+                    --- AKHIR KODE LAMA TOMBOL PRINT (SAMPAI SINI) --- */}
+
+                    {/* --- MULAI SOURCE CODE BARU (CEKLIS) --- */}
+                    {/* NOTE: Checkbox pengganti print stiker. Ceklis dibutuhkan agar tombol Selesai bisa ditekan. */}
+                    {station === 'bar' && !isDone && (
+                        <label style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flex: 1,
+                            background: printedOrders.has(order.orderId || order.id) ? '#dcfce7' : '#f1f5f9',
+                            color: printedOrders.has(order.orderId || order.id) ? '#166534' : '#475569',
+                            padding: '12px',
+                            border: '1px solid ' + (printedOrders.has(order.orderId || order.id) ? '#22c55e' : '#cbd5e1'),
+                            borderRadius: '6px',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            gap: '8px'
+                        }}>
+                            <input 
+                                type="checkbox" 
+                                checked={printedOrders.has(order.orderId || order.id)}
+                                onChange={() => handleCheckOrder(order)}
+                                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                            />
+                            {printedOrders.has(order.orderId || order.id) ? 'DICEKLIS' : 'CEKLIS'}
+                        </label>
+                    )}
+                    {/* --- AKHIR SOURCE CODE BARU (CEKLIS) --- */}
+                    
+                    {/* NOTE: Tombol selesai ini dibatasi (disabled) jika untuk station 'bar' pesanan belum diceklis (belum ada dalam printedOrders) */}
                     <button
                         className="kb-btn-done"
                         onClick={() => handleUpdateStatus(order.orderId || order.id, station)}

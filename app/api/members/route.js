@@ -22,7 +22,7 @@ export async function GET() {
 export async function POST(request) {
     try {
         const body = await request.json()
-        const { name, phoneNumber } = body
+        const { name, phoneNumber, category, discount } = body
 
         if (!name || !phoneNumber) {
             return NextResponse.json({ error: 'Name and Phone Number are required' }, { status: 400 })
@@ -32,6 +32,8 @@ export async function POST(request) {
             data: {
                 name,
                 phoneNumber,
+                category: category || 'member',
+                discount: discount !== undefined ? parseFloat(discount) : 0
             },
         })
 
@@ -41,6 +43,34 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Phone number already exists' }, { status: 409 })
         }
         return NextResponse.json({ error: 'Failed to create member' }, { status: 500 })
+    }
+}
+
+export async function PUT(request) {
+    try {
+        const body = await request.json();
+        const { id, name, phoneNumber, category, discount } = body;
+
+        if (!id || !name || !phoneNumber) {
+            return NextResponse.json({ error: 'ID, Name, and Phone Number are required' }, { status: 400 });
+        }
+
+        const updatedMember = await prisma.member.update({
+            where: { id: parseInt(id) },
+            data: {
+                name,
+                phoneNumber,
+                category: category || 'member',
+                discount: discount !== undefined ? parseFloat(discount) : 0
+            }
+        });
+
+        return NextResponse.json(updatedMember);
+    } catch (error) {
+        if (error.code === 'P2002') {
+            return NextResponse.json({ error: 'Phone number already exists' }, { status: 409 });
+        }
+        return NextResponse.json({ error: 'Failed to update member' }, { status: 500 });
     }
 }
 

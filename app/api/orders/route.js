@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 const prisma = new PrismaClient();
 
 // Hardcoded Recipes as requested
@@ -111,6 +113,7 @@ export async function GET(request) {
             itemsSummary: (o.items || []).map(i => `${i.product?.name || 'Produk Dihapus'} (${i.qty})`).join(', ')
         }));
 
+        console.log(`[GET /api/orders] Returning ${formatted.length} orders. Latest: ${formatted[0]?.orderId}`);
         return NextResponse.json({
             data: formatted,
             meta: {
@@ -118,6 +121,10 @@ export async function GET(request) {
                 page,
                 lastPage: Math.ceil(total / limit) || 1,
                 limit
+            }
+        }, {
+            headers: {
+                'Cache-Control': 'no-store, max-age=0'
             }
         });
     } catch (err) {
@@ -187,13 +194,12 @@ export async function POST(request) {
             for (const item of cart) {
                 const product = await tx.product.findUnique({ where: { id: item.id }, include: { category: true } });
                 if (product) {
-                    const cat = product.category ? product.category.name.toLowerCase() : '';
-                    // Kitchen: Makanan, Snack, Cemilan
-                    if (['makanan', 'snack', 'cemilan'].includes(cat)) {
+                    const cat = product.category ? product.category.name.toLowerCase().trim() : '';
+                    // Kitchen: Makanan, Snack (dan variasi penulisan)
+                    if (['makanan', 'snack', 'snacks', 'cemilan', 'makanan & snack', 'makanan dan snack'].includes(cat)) {
                         needsKitchen = true;
-                    }
-                    // Bar: semua jenis minuman
-                    else if (cat.includes('coffee') || cat.includes('matcha') || cat.includes('chocolate') || cat.includes('choco') || cat.includes('coconut') || ['non-coffee', 'minuman'].includes(cat)) {
+                    } else {
+                        // Kalau bukan makanan/snack, selalu munculkan di bar (termasuk minuman, add-on, dessert baru, dsb)
                         needsBar = true;
                     }
                 }

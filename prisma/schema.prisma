@@ -28,6 +28,8 @@ model Member {
   id          Int      @id @default(autoincrement())
   name        String
   phoneNumber String   @unique
+  category    String   @default("member") // 'member' atau 'owner'
+  discount    Float    @default(0)        // percentage (0-100)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   orders      Order[]

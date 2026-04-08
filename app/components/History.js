@@ -36,7 +36,7 @@ export default function History({ onHome }) {
                 limit: 25,
                 search: debouncedSearch
             });
-            const res = await fetch(`/api/orders?${params.toString()}`);
+            const res = await fetch(`/api/orders?${params.toString()}&t=${Date.now()}`);
             const data = await res.json();
 
             if (data.data) {
